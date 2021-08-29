@@ -7,9 +7,14 @@ import FaceTracking from 'FaceTracking';
 import FaceGestures from 'FaceGestures';
 import CameraInfo from 'CameraInfo';
 import Random from 'Random';
-import Time from 'Time'; // i promise it's not what you're thinking
+import Time from 'Time';
 
 import { checkCollisionsBetweenTwoRectangles } from './utils';
+
+/**
+ * Most things here are likely to change!!!
+ * But these should be the same basic mechanics that will be used on the final version
+ */
 
 (async function () {
     // Rectangle
@@ -41,20 +46,40 @@ import { checkCollisionsBetweenTwoRectangles } from './utils';
     // Assign it to the obj
     playerObject.transform.x = heading;
 
-    // Ignore this bit till we figure something better lol
+    // Center the obj -- Ignore this bit till we figure something better
     playerObject.transform.y = heightOfTheScreen.div(2).sub(playerObject.height.div(2));
 
-    //  ¯\_(ツ)_/¯
+    // (Needs to be improved) 
     const objsAreColliding = checkCollisionsBetweenTwoRectangles(playerObject, badObj0); // @ts-ignore
     (await Scene.root.findFirst('2dText0')).text = objsAreColliding.ifThenElse('Colliding', 'nope, keep trying');
 
-    // You have to be kidding me why does the Random module return a NUMBER
-    // what's the point of the random module???? Lmao
     badObj0.transform.x = Reactive.val(Random.random()).mul(widthOfTheScreen);
 
     // This can/should be broken into smaller more digestible pieces
-    const anim = Animation.timeDriver({durationMilliseconds: 2000, loopCount: Infinity, mirror: false});
-    badObj0.transform.y = Animation.animate(anim, Animation.samplers.linear(0,1)).mul(heightOfTheScreen.add(badObj0.height)).sub(badObj0.height);
-    anim.start();
-    anim.onAfterIteration().subscribe(()=>badObj0.transform.x = Reactive.val(Random.random()).mul(widthOfTheScreen));
+    const TimeDriver = Animation.timeDriver({
+        durationMilliseconds: 2000,
+        loopCount: Infinity,
+        mirror: false
+    });
+
+    // Make a signal that goes from 0-1 over the course of 2000ms (see TimeDriver)
+    let animY = Animation.animate(TimeDriver, Animation.samplers.linear(0,1));
+    // Make the animated value go from (-objHeight) to (objHeight + screenSize)
+    animY = animY
+            .mul(heightOfTheScreen.add(badObj0.height))
+            .sub(badObj0.height);
+
+    // Change the Y position of the object
+    badObj0.transform.y = animY;
+
+    // Start the TimeDriver/animate the signal
+    TimeDriver.start();
+
+    // When the signal completes a loop, then... 👇
+    TimeDriver.onAfterIteration().subscribe(()=>{
+        // 👇
+        // Change the X position, making it so the objects don't always fall across the portion of the screen
+        badObj0.transform.x = Reactive.val(Random.random()).mul(widthOfTheScreen);
+    });
+
 })();

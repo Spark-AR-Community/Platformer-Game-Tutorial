@@ -1,0 +1,3 @@
+*.arprojbk
+# Set up by Spark when the project is opened 👇
+/scripts/tsconfig.json
