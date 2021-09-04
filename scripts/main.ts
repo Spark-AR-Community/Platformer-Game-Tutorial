@@ -9,6 +9,7 @@ import CameraInfo from 'CameraInfo';
 import Random from 'Random';
 import Time from 'Time';
 
+import { Player, EnemyObject } from './players';
 import { checkCollisionsBetweenTwoRectangles } from './utils';
 
 /**
@@ -17,69 +18,42 @@ import { checkCollisionsBetweenTwoRectangles } from './utils';
  */
 
 (async function () {
-    // Rectangle
-    const playerObject = await Scene.root.findFirst('playerObject') as PlanarObject;
-    const badObj0 = await Scene.root.findFirst('bad0') as PlanarObject;
+  // Rectangle
+  const playerObject = (await Scene.root.findFirst('playerObject')) as PlanarObject;
+  const enemies = (await Scene.root.findByPath('**/bad*')) as PlanarObject[];
 
-    // Face 0
-    const face0 = FaceTracking.face(0);
+  // Store the 0th (first) FaceTracking Face as a variable
+  // This "Face" object (assigned to the face0 var), contains all the FaceTracking data you'd
+  // have access to in the Patch editor. E.g.: face0.nose
+  const face0 = FaceTracking.face(0);
 
-    // Screen size
-    const widthOfTheScreen = CameraInfo.previewSize.x.div(CameraInfo.previewScreenScale);
-    const heightOfTheScreen = CameraInfo.previewSize.y.div(CameraInfo.previewScreenScale);
-    
-    // Smooth out the signal -- reduce noise & make an 'acceleration' effect
-    let heading = face0.cameraTransform.rotationY.expSmooth(100);
+  // Create a Player instance
+  const player = new Player(playerObject);
+  // bind the player to the face
+  player.bindPlayerToFace(face0);
 
-    // Take the signal, and transform it into the 0-1 range
-    heading = heading.fromRange(-0.5, 0.5);
+  // Store all enemy instances as an array
+  const enemyInstances = [];
 
-    // Prevent it from going over the 0-1 range
-    heading = heading.clamp(0,1);
+  // Create new Enemies & store them as part of the array
+  enemies.forEach((enemy) => {
+    // Create an Enemy
+    const enemyInstance = new EnemyObject(enemy);
+    // Randomize & animate
+    enemyInstance.randomizeXPosition();
+    // 2000ms, 100% randomization
+    enemyInstance.animateYPosition(2000, 1);
 
-    // Make the 0-1 signal go from 0 to the max width of the screen
-    heading = heading.mul(widthOfTheScreen);
+    // push to array
+    enemyInstances.push(enemyInstance);
+  });
 
-    // Prevent the rectangle from going over the borders of the screen
-    heading = heading.mul(Reactive.sub(1, playerObject.width.div(widthOfTheScreen)));
+  // Use an Array map + Reactive.orList to check for ANY collision between an enemy & the player
+  const isThereACollision = Reactive.orList(
+    enemyInstances.map((enemy) => checkCollisionsBetweenTwoRectangles(player.body, enemy.body)),
+  );
 
-    // Assign it to the obj
-    playerObject.transform.x = heading;
-
-    // Center the obj -- Ignore this bit till we figure something better
-    playerObject.transform.y = heightOfTheScreen.div(2).sub(playerObject.height.div(2));
-
-    // (Needs to be improved) 
-    const objsAreColliding = checkCollisionsBetweenTwoRectangles(playerObject, badObj0); // @ts-ignore
-    (await Scene.root.findFirst('2dText0')).text = objsAreColliding.ifThenElse('Colliding', 'nope, keep trying');
-
-    badObj0.transform.x = Reactive.val(Random.random()).mul(widthOfTheScreen);
-
-    // This can/should be broken into smaller more digestible pieces
-    const TimeDriver = Animation.timeDriver({
-        durationMilliseconds: 2000,
-        loopCount: Infinity,
-        mirror: false
-    });
-
-    // Make a signal that goes from 0-1 over the course of 2000ms (see TimeDriver)
-    let animY = Animation.animate(TimeDriver, Animation.samplers.linear(0,1));
-    // Make the animated value go from (-objHeight) to (objHeight + screenSize)
-    animY = animY
-            .mul(heightOfTheScreen.add(badObj0.height))
-            .sub(badObj0.height);
-
-    // Change the Y position of the object
-    badObj0.transform.y = animY;
-
-    // Start the TimeDriver/animate the signal
-    TimeDriver.start();
-
-    // When the signal completes a loop, then... 👇
-    TimeDriver.onAfterIteration().subscribe(()=>{
-        // 👇
-        // Change the X position, making it so the objects don't always fall across the portion of the screen
-        badObj0.transform.x = Reactive.val(Random.random()).mul(widthOfTheScreen);
-    });
-
+  // Display
+  const twoDText = (await Scene.root.findFirst('2dText0')) as PlanarText;
+  twoDText.text = isThereACollision.ifThenElse('colliding', 'nope, keep trying');
 })();
